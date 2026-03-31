@@ -355,43 +355,57 @@ if "plan" in st.session_state:
         st.markdown("### Today")
 
         if not today_tasks:
-            st.caption("No tasks match the current filters for today.")
+            st.info("No tasks match the current filters for today.")
         else:
-            h1, h2, h3, h4, h5, h6 = st.columns([2, 3, 2, 2, 2, 1])
-            h1.markdown("**Start**"); h2.markdown("**Task**")
-            h3.markdown("**Pet**");   h4.markdown("**Duration**")
-            h5.markdown("**Priority**")
+            # Summary metrics — counts and time at a glance
+            pending_count = sum(1 for t in today_tasks if not t.completed)
+            done_count    = sum(1 for t in today_tasks if t.completed)
+            time_used     = sum(t.duration_minutes for t in today_tasks if t.start_time_minutes is not None)
+            m1, m2, m3 = st.columns(3)
+            m1.metric("Pending today",   pending_count)
+            m2.metric("Completed today", done_count)
+            m3.metric("Time scheduled",  f"{time_used} min")
 
-            for t in today_tasks:
-                r1, r2, r3, r4, r5, r6 = st.columns([2, 3, 2, 2, 2, 1])
-                r1.write("✓ Done" if t.completed else minutes_to_time_str(t.start_time_minutes))
-                r2.write(t.title)
-                r3.write(task_to_pet.get(id(t), "—"))
-                r4.write(f"{t.duration_minutes} min")
-                r5.write(t.priority.name)
-                with r6:
-                    if t.completed:
-                        if st.button("Undo", key=f"sched_undo_{id(t)}"):
-                            t.unmark_complete()
-                            # Regenerate so the task moves back into Today as pending
-                            _plan, _conflicts = st.session_state.scheduler.generate_plan(
-                                day_start_minutes=st.session_state.day_start_minutes,
-                                lookahead_days=30,
-                            )
-                            st.session_state.plan      = _plan
-                            st.session_state.conflicts = _conflicts
-                            st.rerun()
-                    else:
-                        if st.button("Done", key=f"sched_done_{id(t)}"):
-                            t.mark_complete()
-                            # Regenerate so the task's next occurrence appears in Upcoming
-                            _plan, _conflicts = st.session_state.scheduler.generate_plan(
-                                day_start_minutes=st.session_state.day_start_minutes,
-                                lookahead_days=30,
-                            )
-                            st.session_state.plan      = _plan
-                            st.session_state.conflicts = _conflicts
-                            st.rerun()
+            if pending_count == 0:
+                st.success("All tasks for today are done! Great job. 🎉")
+            else:
+                PRIORITY_BADGE = {"HIGH": "🔴 HIGH", "MEDIUM": "🟡 MEDIUM", "LOW": "🟢 LOW"}
+
+                h1, h2, h3, h4, h5, h6 = st.columns([2, 3, 2, 2, 2, 1])
+                h1.markdown("**Start**"); h2.markdown("**Task**")
+                h3.markdown("**Pet**");   h4.markdown("**Duration**")
+                h5.markdown("**Priority**")
+
+                for t in today_tasks:
+                    r1, r2, r3, r4, r5, r6 = st.columns([2, 3, 2, 2, 2, 1])
+                    r1.write("✓ Done" if t.completed else minutes_to_time_str(t.start_time_minutes))
+                    r2.write(t.title)
+                    r3.write(task_to_pet.get(id(t), "—"))
+                    r4.write(f"{t.duration_minutes} min")
+                    r5.write(PRIORITY_BADGE.get(t.priority.name, t.priority.name))
+                    with r6:
+                        if t.completed:
+                            if st.button("Undo", key=f"sched_undo_{id(t)}"):
+                                t.unmark_complete()
+                                # Regenerate so the task moves back into Today as pending
+                                _plan, _conflicts = st.session_state.scheduler.generate_plan(
+                                    day_start_minutes=st.session_state.day_start_minutes,
+                                    lookahead_days=30,
+                                )
+                                st.session_state.plan      = _plan
+                                st.session_state.conflicts = _conflicts
+                                st.rerun()
+                        else:
+                            if st.button("Done", key=f"sched_done_{id(t)}"):
+                                t.mark_complete()
+                                # Regenerate so the task's next occurrence appears in Upcoming
+                                _plan, _conflicts = st.session_state.scheduler.generate_plan(
+                                    day_start_minutes=st.session_state.day_start_minutes,
+                                    lookahead_days=30,
+                                )
+                                st.session_state.plan      = _plan
+                                st.session_state.conflicts = _conflicts
+                                st.rerun()
 
         st.divider()
 
@@ -415,31 +429,24 @@ if "plan" in st.session_state:
 
         # Upcoming tasks only appear after tasks are marked complete —
         # until then, all tasks are due today and show in the Today section above
+        PRIORITY_BADGE = {"HIGH": "🔴 HIGH", "MEDIUM": "🟡 MEDIUM", "LOW": "🟢 LOW"}
         with st.expander("View upcoming tasks", expanded=True):
-            showed_any = False
+            upcoming_rows = []
             for plan_date, tasks in future_dates.items():
                 if plan_date > cutoff:
                     continue    # outside the selected window
-
                 if pet_filter != "All pets":
                     tasks = scheduler.filter_tasks(tasks, pet_name=pet_filter)
-                if not tasks:
-                    continue
-
-                st.markdown(f"**{plan_date.strftime('%A, %B %-d')}**")
-
-                h1, h2, h3, h4 = st.columns([3, 2, 2, 2])
-                h1.markdown("**Task**");     h2.markdown("**Pet**")
-                h3.markdown("**Duration**"); h4.markdown("**Priority**")
-
                 for t in tasks:
-                    r1, r2, r3, r4 = st.columns([3, 2, 2, 2])
-                    r1.write(t.title)
-                    r2.write(task_to_pet.get(id(t), "—"))
-                    r3.write(f"{t.duration_minutes} min")
-                    r4.write(t.priority.name)
+                    upcoming_rows.append({
+                        "Date":     plan_date.strftime("%A, %b %-d"),
+                        "Task":     t.title,
+                        "Pet":      task_to_pet.get(id(t), "—"),
+                        "Duration": f"{t.duration_minutes} min",
+                        "Priority": PRIORITY_BADGE.get(t.priority.name, t.priority.name),
+                    })
 
-                showed_any = True
-
-            if not showed_any:
-                st.caption("No upcoming tasks yet — tasks appear here after being marked Done.")
+            if upcoming_rows:
+                st.dataframe(upcoming_rows, use_container_width=True, hide_index=True)
+            else:
+                st.info("No upcoming tasks yet — tasks appear here after being marked Done.")
