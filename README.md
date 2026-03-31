@@ -1,30 +1,15 @@
-# PawPal+ (Module 2 Project)
+# 🐾 PawPal+
 
-You are building **PawPal+**, a Streamlit app that helps a pet owner plan care tasks for their pet.
+**PawPal+** is a pet care scheduling assistant that helps busy pet owners stay on top of their furry friends' daily needs. Tell it who your pets are, what they need, and how much time you have — and it'll build the smartest possible plan for your day!
 
-## Scenario
+---
 
-A busy pet owner needs help staying consistent with pet care. They want an assistant that can:
+## Demo
+<a href="demo-screenshot.png" target="_blank"><img src='demo-screenshot.png' title='PawPal App' width='' alt='PawPal App' class='center-block' /></a>
 
-- Track pet care tasks (walks, feeding, meds, enrichment, grooming, etc.)
-- Consider constraints (time available, priority, owner preferences)
-- Produce a daily plan and explain why it chose that plan
+## 🚀 Getting Started
 
-Your job is to design the system first (UML), then implement the logic in Python, then connect it to the Streamlit UI.
-
-## What you will build
-
-Your final app should:
-
-- Let a user enter basic owner + pet info
-- Let a user add/edit tasks (duration + priority at minimum)
-- Generate a daily schedule/plan based on constraints and priorities
-- Display the plan clearly (and ideally explain the reasoning)
-- Include tests for the most important scheduling behaviors
-
-## Getting started
-
-### Setup
+### 1. Set up your environment
 
 ```bash
 python3 -m venv .venv
@@ -32,28 +17,152 @@ source .venv/bin/activate  # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
 ```
 
-### Suggested workflow
+### 2. Launch the app
 
-1. Read the scenario carefully and identify requirements and edge cases.
-2. Draft a UML diagram (classes, attributes, methods, relationships).
-3. Convert UML into Python class stubs (no logic yet).
-4. Implement scheduling logic in small increments.
-5. Add tests to verify key behaviors.
-6. Connect your logic to the Streamlit UI in `app.py`.
-7. Refine UML so it matches what you actually built.
+```bash
+streamlit run app.py
+```
 
-### Smarter Scheduling
-These are the scheduling features I implemented with the help of Claude Code!
+Your browser will open automatically at `http://localhost:8501`. 🎉
 
-1. **Priority-based knapsack selection** — Instead of just grabbing tasks in order until time runs out, the scheduler uses a knapsack algorithm to find the combination of tasks with the highest total priority that actually fits within the available time budget. This means a long, low-priority task won't accidentally block two shorter, more important ones from getting into the plan.
+---
 
-2. **Conflict detection and time-slot assignment** — Once the best set of tasks is selected, each one gets assigned a real start time. If two tasks for the same pet would overlap, the second one gets bumped to the next open slot automatically. A warning message explains what happened and where the task moved to, so nothing silently disappears from the schedule.
+## 🗺️ How to Use PawPal+
 
-3. **Sorting and filtering the plan** — After the plan is generated, you can sort today's tasks by start time (earliest or latest first) and filter by completion status (pending or done) or by which pet the task belongs to. Sorting only applies to today's tasks since future tasks don't have time slots yet.
+The app walks you through four steps from top to bottom. Fill each one out in order and you'll have a personalized schedule in no time!
 
-4. **Interval-based recurrence** — Every task tracks when it was last completed. From that, it calculates its next due date by dividing the period length by how many times it repeats — for example, a task done twice a week becomes due again in 3.5 days. Tasks that have never been completed are treated as due immediately. This is what drives the whole upcoming section.
+---
 
-5. **Multi-day plan grouped by due date** — Instead of producing one flat list for today, the scheduler builds a 30-day lookahead grouped by date. Today's section runs the full knapsack and time-slot logic. Future sections just show which tasks are coming up and when, based on each task's next due date. When a task is marked done, the plan regenerates immediately and the next occurrence appears in the right future date section automatically.
+### Step 1 — Enter Your Name 👤
+
+Type in your name and hit **Save owner**.
+
+> **Example:** `Jordan`
+
+Once saved, your name appears at the top of the section. You can always click **Edit** to change it later — no harm done!
+
+---
+
+### Step 2 — Add Your Pets 🐶🐱
+
+Fill in your pet's name, age, and breed, then click **Add pet**. Repeat for as many pets as you have!
+
+| Field | Example |
+|-------|---------|
+| Pet name | `Mochi` |
+| Age | `3` |
+| Breed | `Shiba Inu Mix` |
+
+Your pets will appear in a list below the form. Each row has:
+- **Edit** — fix a typo or update their age
+- **Delete** — remove a pet (this also removes all their tasks!)
+
+> 💡 **Tip:** PawPal+ supports multiple pets! Add all of them so the scheduler can plan everyone's care together.
+
+---
+
+### Step 3 — Add Tasks 📋
+
+For each pet, describe what needs to get done. Every task needs:
+
+| Field | What it means | Example |
+|-------|---------------|---------|
+| **For pet** | Which pet this task belongs to | `Mochi` |
+| **Task title** | A short name for the task | `Morning Walk` |
+| **Duration (min)** | How long it takes | `30` |
+| **Priority** | How important it is | `high` |
+| **Type** | Category of care | `walk` |
+| **Times per period** | How often it repeats | `1` |
+| **Period** | The time window for that frequency | `Daily` |
+
+Click **Add task** and it appears in the task list below. The task counter next to the form updates automatically to show how many tasks your pet has.
+
+#### Frequency examples
+
+| What you want | Times per period | Period |
+|---------------|-----------------|--------|
+| Once a day | `1` | `Daily` |
+| Twice a day | `2` | `Daily` |
+| Three times a week | `3` | `Weekly` |
+| Twice a month | `2` | `Monthly` |
+
+> 💡 **Tip:** The **Due** column in the task list shows when each task is next due. Right after adding a task it says "Today" — that's normal! It updates as soon as you start marking tasks done.
+
+You can also **Delete** any task from the list if your pet's routine changes.
+
+---
+
+### Step 4 — Generate Your Schedule 📅
+
+Set two things:
+- **Schedule start time** — when your care session begins (e.g. `8:00 AM`)
+- **Time available today** — your total time budget in minutes (e.g. `90`)
+
+Then hit **Generate schedule**!
+
+> **Example:** You have 90 minutes starting at 8 AM. Mochi needs a 30-minute walk, 10-minute feeding, and 20-minute enrichment play. The scheduler picks the best combination that fits and assigns each task a real start time.
+
+---
+
+## 📋 Reading Your Schedule
+
+### Today
+
+The Today section shows everything scheduled for right now, with three summary numbers at the top:
+
+- **Pending today** — tasks still waiting to be done
+- **Completed today** — tasks you've already finished 🎉
+- **Time scheduled** — total minutes the plan will take
+
+Each row shows the **start time**, task name, which pet it's for, how long it takes, and its priority level (`🔴 HIGH`, `🟡 MEDIUM`, `🟢 LOW`).
+
+When you finish a task, hit **Done** — it moves to the bottom of the list with a ✓ checkmark. Changed your mind? Hit **Undo** to put it back.
+
+Once every task is checked off, you'll see a big **"All tasks for today are done!"** banner. You've earned it! 🎊
+
+### Upcoming
+
+The Upcoming section shows what's coming later this week or month, based on each task's recurrence schedule. After you mark a task done, its next occurrence automatically appears here on the right future date.
+
+Use the **This Week / This Month** toggle to control how far ahead you're looking.
+
+---
+
+## 🔍 Sort & Filter
+
+Above the Today table, three controls let you slice and dice the plan:
+
+| Control | Options | What it does |
+|---------|---------|--------------|
+| **Sort today by time** | Earliest first / Latest first | Reorders the today table |
+| **Filter by status** | All / Pending only / Done only | Hides tasks you don't want to see |
+| **Filter by pet** | All pets / individual pet name | Shows only one pet's tasks |
+
+> **Example:** You have two dogs and only want to see what's left for Mochi. Set **Filter by pet** → `Mochi` and **Filter by status** → `Pending only`. Done!
+
+---
+
+## 🧠 How the Scheduler Thinks
+
+PawPal+ doesn't just grab tasks in order until time runs out — it's smarter than that! Here's a peek at what's happening under the hood:
+
+## ✨ Features - Smart Scheduling
+
+- **Priority-based knapsack scheduling** — instead of grabbing tasks in order until time runs out, the scheduler finds the combination of tasks with the highest total priority that actually fits your time budget. A long, low-priority task won't accidentally push out two shorter, more important ones.
+
+- **Interval-based recurrence** — every task tracks when it was last completed and calculates its next due date automatically. A task done twice a week becomes due again in 3.5 days; a task done twice a month comes back in 15 days. Tasks that have never been done are always treated as due today.
+
+- **Multi-day lookahead** — the schedule isn't just a flat list for today. It groups tasks by due date across a 30-day window, so you can see what's coming up this week or this month — and when you mark something done, the next occurrence shows up in the right future slot immediately.
+
+- **Time-slot assignment** — every task selected for today gets a real start time, not just an order. Tasks are placed back-to-back starting from your chosen schedule start time, so the plan is always clock-ready.
+
+- **Sort by start time** — reorder today's tasks by earliest or latest start time with one click. Useful when you want to tackle the hardest things first, or see what's left at the end of the day.
+
+- **Filter by status or pet** — narrow the schedule down to just pending tasks, just completed ones, or just one specific pet. Filters stack, so "Mochi's pending tasks" is two clicks away.
+
+- **Completion tracking with undo** — mark a task done right from the schedule. If you tapped the wrong one, hit Undo to put it back in the pending list and the plan adjusts instantly.
+
+- **Conflict warnings** — if the scheduler ever needs to move a task to avoid an overlap for the same pet, it surfaces a warning message explaining exactly where the task was moved and why, so nothing quietly disappears from your day.
 
 ### Testing PawPal+
 
