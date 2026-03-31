@@ -122,6 +122,16 @@ class Task:
         self.completed = True
         self.last_completed_date = date.today()
 
+    def unmark_complete(self) -> None:
+        """
+        Reverses a mark_complete() call made today.
+        Resets completed and clears last_completed_date so the task is treated
+        as never done — next_due_date() returns today again and the scheduler
+        will include it in the next plan generation.
+        """
+        self.completed = False
+        self.last_completed_date = None
+
 
 # ---------------------------------------------------------------------------
 # Pet
@@ -266,13 +276,47 @@ class Scheduler:
     def sort_tasks(self) -> list[Task]:
         """
         Returns tasks sorted by scheduling priority.
-        Sort order: incomplete first, then Priority (desc), then daily_rate (desc),
-        then duration (asc) as a tiebreaker to fit more tasks in the time budget.
+        Sort order: Priority (desc) → daily_rate (desc) → duration (asc).
+        completed is no longer part of this key — generate_plan() separates
+        pending from done before calling sort_tasks(), so mixing them here
+        would cause already-done tasks to compete with pending ones.
         """
         return sorted(
             self.get_all_tasks(),
-            key=lambda t: (t.completed, -t.priority.value, -t.daily_rate(), t.duration_minutes)
+            key=lambda t: (-t.priority.value, -t.daily_rate(), t.duration_minutes)
         )
+
+    def filter_tasks(
+        self,
+        plan: list[Task],
+        completed: bool | None = None,
+        pet_name: str | None = None,
+    ) -> list[Task]:
+        """
+        Returns a filtered subset of a generated plan.
+
+        Arguments:
+          completed — True: only done tasks | False: only pending | None: no filter
+          pet_name  — keep only tasks belonging to this pet  | None: no filter
+
+        Both filters apply together (AND logic), so
+        filter_tasks(plan, completed=False, pet_name="Amie") returns
+        only Amie's incomplete tasks.
+
+        Builds a task → pet name lookup internally so Task doesn't need a
+        back-reference to its Pet (which we deliberately removed from the design).
+        """
+        # Map each Task object's id to its owner's name using the Scheduler's pet list
+        task_to_pet = {id(task): pet.name for pet in self.pets for task in pet.tasks}
+
+        result = plan
+        if completed is not None:
+            # Keep tasks whose completed flag matches the requested status
+            result = [t for t in result if t.completed == completed]
+        if pet_name is not None:
+            # Keep tasks that belong to the requested pet
+            result = [t for t in result if task_to_pet.get(id(t)) == pet_name]
+        return result
 
     def sort_by_time(self, plan: list[Task], reverse: bool = False) -> list[Task]:
         """
@@ -339,87 +383,99 @@ class Scheduler:
 
         return selected
 
-    def generate_plan(self, day_start_minutes: int = 480) -> tuple[list[Task], list[str]]:
+    def generate_plan(
+        self,
+        day_start_minutes: int = 480,
+        lookahead_days: int = 7,
+    ) -> tuple[dict[date, list[Task]], list[str]]:
         """
-        Builds today's care plan in two stages:
+        Builds a multi-day care plan grouped by due date.
 
-        Stage 1 — Knapsack selection:
-            Filter to eligible tasks (due today, not completed), then call
-            knapsack_select() to find the highest-priority combination that
-            fits in the time budget. This replaces the old greedy approach.
+        Today's section — two stages:
+          1. Knapsack selects the highest-priority pending tasks that fit the time budget.
+          2. Time-slot assignment gives each selected task a real start time.
+             Already-completed-today tasks are appended after (no slot needed).
 
-        Stage 2 — Time-slot assignment + conflict detection:
-            Take the knapsack-selected tasks (re-sorted by priority for a
-            logical time order) and assign each a real start time.
-            Per-pet conflicts are resolved by bumping to the next open slot.
+        Future sections (days 1..lookahead_days):
+          Tasks are grouped by next_due_date() with no time-slot assignment —
+          we don't know the owner's schedule for future days yet.
 
         Parameters:
-            day_start_minutes: schedule start as minutes from midnight (default 480 = 8 AM)
+            day_start_minutes : schedule start as minutes from midnight (default 480 = 8 AM)
+            lookahead_days    : how many days ahead to include future tasks (default 7)
 
         Returns:
-            plan      — Task objects with start_time_minutes assigned
-            conflicts — human-readable strings for any time bumps that occurred
+            plan      — {date: [Task, ...]} sorted chronologically
+            conflicts — human-readable strings for any time bumps that happened today
         """
-        # --- Stage 1: knapsack picks the optimal subset ---
+        today     = date.today()
+        all_tasks = self.get_all_tasks()
 
-        # Only eligible tasks go into the knapsack — completed and not-yet-due are excluded
-        eligible = [
-            t for t in self.sort_tasks()
-            if not t.completed and t.is_due_today()
-        ]
+        # --- Today: separate pending from already-done-today ---
 
-        # knapsack_select returns the best combination; re-sort so high-priority tasks
-        # get earlier time slots during stage 2
-        selected = self.knapsack_select(eligible)
+        # Pending = due today AND not yet completed in this session
+        pending_today = [t for t in self.sort_tasks() if t.is_due_today() and not t.completed]
+
+        # Done today = completed flag is True AND last_completed_date is today
+        done_today = [t for t in all_tasks if t.completed and t.last_completed_date == today]
+
+        # Knapsack picks the best-fit subset; re-sort for chronological time-slot assignment
+        selected = self.knapsack_select(pending_today)
         selected.sort(key=lambda t: (-t.priority.value, -t.daily_rate(), t.duration_minutes))
 
-        # --- Stage 2: assign real start times, detect per-pet conflicts ---
+        # --- Time-slot assignment + conflict detection for today's pending tasks ---
 
-        # Build a fast id → pet name lookup so conflict detection knows which pet each task belongs to
-        task_to_pet_name = {
-            id(task): pet.name
-            for pet in self.pets
-            for task in pet.tasks
-        }
-
-        # Per-pet slot registry: pet_name → [(start, end), ...]
-        # Conflicts only matter within the same pet — two different pets can share a time window
+        task_to_pet_name = {id(task): pet.name for pet in self.pets for task in pet.tasks}
         pet_slots: dict[str, list[tuple[int, int]]] = {pet.name: [] for pet in self.pets}
 
-        plan: list[Task] = []
+        today_scheduled: list[Task] = []
         conflicts: list[str] = []
         current_time = day_start_minutes
-        day_end = day_start_minutes + self.total_available_minutes
+        day_end      = day_start_minutes + self.total_available_minutes
 
         for task in selected:
-            pet_name = task_to_pet_name[id(task)]
+            pet_name       = task_to_pet_name[id(task)]
             proposed_start = current_time
 
-            # Bump proposed_start past any overlapping slot for this pet.
-            # Loop because each bump might expose a new conflict with a later slot.
+            # Bump past any same-pet conflicts; loop because each bump may expose another
             bumped = True
             while bumped:
-                bumped = False
-                proposed_end = proposed_start + task.duration_minutes
+                bumped        = False
+                proposed_end  = proposed_start + task.duration_minutes
                 for slot_start, slot_end in pet_slots[pet_name]:
                     if _slots_overlap(proposed_start, proposed_end, slot_start, slot_end):
                         conflicts.append(
-                            f"'{task.title}' ({pet_name}): conflict detected — "
+                            f"'{task.title}' ({pet_name}): conflict — "
                             f"moved from {minutes_to_time_str(proposed_start)} "
                             f"to {minutes_to_time_str(slot_end)}"
                         )
-                        proposed_start = slot_end   # jump past the blocking slot
-                        bumped = True
-                        break                        # restart scan from the new start time
+                        proposed_start = slot_end
+                        bumped         = True
+                        break
 
-            # After bumping, verify the task still fits before the day ends
             if proposed_start + task.duration_minutes > day_end:
-                continue    # no longer fits — skip it
+                continue    # bumped past end of day — drop it
 
-            # Commit the slot: write start time onto the task, register it, add to plan
             task.start_time_minutes = proposed_start
             pet_slots[pet_name].append((proposed_start, proposed_start + task.duration_minutes))
-            plan.append(task)
-            current_time = proposed_start + task.duration_minutes  # advance the global time cursor
+            today_scheduled.append(task)
+            current_time = proposed_start + task.duration_minutes
 
-        return plan, conflicts
+        # Today's section = scheduled pending tasks first, then already-done tasks
+        plan: dict[date, list[Task]] = {today: today_scheduled + done_today}
+
+        # --- Future days: group by next_due_date() ---
+
+        lookahead_end = today + timedelta(days=lookahead_days)
+
+        for task in all_tasks:
+            due = task.next_due_date()
+            # Skip today (handled above) and anything beyond the lookahead window
+            if due <= today or due > lookahead_end:
+                continue
+            if due not in plan:
+                plan[due] = []
+            plan[due].append(task)
+
+        # Return sorted by date so the UI can iterate chronologically
+        return dict(sorted(plan.items())), conflicts
