@@ -274,6 +274,16 @@ class Scheduler:
             key=lambda t: (t.completed, -t.priority.value, -t.daily_rate(), t.duration_minutes)
         )
 
+    def sort_by_time(self, plan: list[Task], reverse: bool = False) -> list[Task]:
+        """
+        Sorts a generated plan by start time, earliest first by default.
+        Pass reverse=True to get latest-first order.
+
+        Only call this on the output of generate_plan() — start_time_minutes
+        is None on unscheduled tasks and will raise a TypeError if compared.
+        """
+        return sorted(plan, key=lambda t: t.start_time_minutes, reverse=reverse)
+
     def knapsack_select(self, tasks: list[Task]) -> list[Task]:
         """
         Picks the combination of tasks with the highest total priority score
