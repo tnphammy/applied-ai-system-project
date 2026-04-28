@@ -1,9 +1,20 @@
+import logging
+import re
 from dataclasses import dataclass, field
 from datetime import date, timedelta
 from enum import Enum
 from google import genai
 from google.genai import types
-# import google.generativeai as genai
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] PetAssistant: %(message)s",
+    handlers=[
+        logging.FileHandler("pawpal_ai.log"),
+        logging.StreamHandler(),
+    ],
+)
+_logger = logging.getLogger("PetAssistant")
 
 
 
@@ -502,20 +513,32 @@ class PetAssistant:
     sick_pets: list[str] = field(default_factory=list)       # pet names flagged as unwell
     chat_history: list[dict] = field(default_factory=list)   # full conversation for multi-turn context
 
+    def _parse_confidence(self, text: str) -> tuple[str, int | None]:
+        """
+        Extracts the trailing [Confidence: N%] tag Gemini is instructed to append.
+        Returns (cleaned_text, score_int) or (text, None) if the tag is absent.
+        """
+        match = re.search(r"\[Confidence:\s*(\d+)%\]", text)
+        if not match:
+            return text, None
+        score = int(match.group(1))
+        cleaned = text[: match.start()].rstrip()
+        return cleaned, score
+
     def ask(self, user_message: str) -> str:
         """
         Main pipeline entry — called from app.py when the owner submits a message.
         Input:  user_message: str
         Output: reply: str  (displayed in st.chat_message)
         """
-        # 1. Append user turn to internal history using "user"/"assistant" roles.
-        #    We keep this format so app.py can pass msg["role"] to st.chat_message()
-        #    without any translation — "assistant" renders the correct avatar there.
+        _logger.info(
+            "User message received (len=%d, history_len=%d)",
+            len(user_message),
+            len(self.chat_history),
+        )
+
         self.chat_history.append({"role": "user", "content": user_message})
 
-        # 2. Convert internal history to Gemini's format before the API call.
-        #    Gemini requires role "model" where we store "assistant", and wraps
-        #    the text in a "parts" list instead of a flat "content" string.
         gemini_contents = [
             {
                 "role": "model" if msg["role"] == "assistant" else "user",
@@ -524,61 +547,42 @@ class PetAssistant:
             for msg in self.chat_history
         ]
 
-        # 3. Merge persona + live app data into one system_instruction string.
-        #    Gemini reads this before any contents, so the model knows who it is
-        #    AND what the owner's current schedule looks like on every call.
         system_instruction = (
             f"{self.build_system_prompt()}\n\n"
             f"{self.build_context_block()}"
         )
 
-        # 4. Call Gemini API.
-        #    - contents: list[dict] — the full conversation in Gemini's format
-        #    - system_instruction: str — persona + context, injected before contents
-        #    - max_output_tokens: caps the reply length
-        # client = genai.Client(api_key=self.api_key)
-        # response = client.models.generate_content(
-        #     model="gemini-2.0-flash",
-        #     contents=gemini_contents,
-        #     config=types.GenerateContentConfig(
-        #         system_instruction=system_instruction,
-        #         max_output_tokens=1024,
-        #     ),
-        # )
+        fallback = "I'm having trouble connecting right now. Please try again."
 
+        try:
+            client = genai.Client(api_key=self.api_key)
+            response = client.models.generate_content(
+                model="gemini-2.0-flash",
+                config=types.GenerateContentConfig(
+                    system_instruction=system_instruction,
+                    max_output_tokens=1024,
+                ),
+                contents=gemini_contents,
+            )
+            raw: str = response.text or ""
+        except Exception as exc:
+            _logger.error("API call failed: %s: %s", type(exc).__name__, exc)
+            self.chat_history.append({"role": "assistant", "content": fallback, "confidence": None})
+            return fallback
 
-        # genai.configure(api_key=self.api_key)
-        # client = genai.GenerativeModel(
-        #     model_name="gemini-1.5-flash",  
-        #     system_instruction=self.build_system_prompt(),
-        # )
-        # response = client.generate_content(messages_with_context)
-        # reply: str = response.text
+        if not raw.strip():
+            _logger.warning("API returned an empty response")
+            self.chat_history.append({"role": "assistant", "content": fallback, "confidence": None})
+            return fallback
 
-
-
-        # client = genai.Client()
-
-        # response = client.models.generate_content(
-        #     model="gemini-3-flash-preview", contents="Explain how AI works in a few words"
-        # )
-
-        client = genai.Client(api_key=self.api_key)   # pass key — Client() alone uses env var, not self.api_key
-        response = client.models.generate_content(
-            model="gemini-3-flash-preview",                  # gemini-3-flash-preview doesn't exist yet
-            config=types.GenerateContentConfig(
-                system_instruction=system_instruction),
-            contents=gemini_contents                   # use converted format, not self.chat_history
+        reply, confidence = self._parse_confidence(raw)
+        _logger.info(
+            "AI response received (len=%d, confidence=%s%%)",
+            len(reply),
+            confidence if confidence is not None else "n/a",
         )
 
-        print(response.text)
-
-        # 5. response.text is a str — Gemini flattens the reply for us
-        reply: str = response.text
-
-        # 6. Save assistant turn so the next question remembers this answer
-        self.chat_history.append({"role": "assistant", "content": reply})
-
+        self.chat_history.append({"role": "assistant", "content": reply, "confidence": confidence})
         return reply
 
     def clear_history(self) -> None:
@@ -593,7 +597,10 @@ class PetAssistant:
         return (
             "You are PawPal, a friendly and knowledgeable pet care assistant. "
             "You help owners stay on top of their pets' schedules and wellbeing. "
-            "Answer concisely and warmly. Never make up medication names or dosages."
+            "Answer concisely and warmly. Never make up medication names or dosages. "
+            "At the very end of every reply append exactly one line in this format: "
+            "[Confidence: N%] where N is an integer 0-100 reflecting how certain you are "
+            "given the context provided. Do not explain the score."
         )
 
     def build_context_block(self) -> str:
