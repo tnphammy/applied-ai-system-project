@@ -194,14 +194,34 @@ I also learned that mocking is genuinely useful, not just a test trick. Testing 
 
 ## Reflection
 
-The biggest thing this project taught me is that "works" has two very different meanings depending on what you're building.
+The biggest thing this project taught me is that "works" has two very different meanings depending on what you're building. For the scheduling logic, "works" is binary and verifiable — either the knapsack finds the optimal combination or it doesn't, and a test tells you which. For the AI integration, "works" is probabilistic and contextual, and that gap changes everything about how you design and test the system.
 
-For the scheduling logic, "works" is binary and verifiable — either the knapsack finds the optimal combination or it doesn't, and a test tells you which. I can trace through the DP table, predict the output, and write an assertion that confirms it. The confidence there is high because the behavior is deterministic.
+**Limitations and biases in the system**
 
-For the AI integration, "works" is contextual. The model might give a great answer 9 times and a vague one the tenth time, and no unit test captures that. What I can test is the structural behavior such as: does the context get injected correctly? Does the history grow the right way? Does the error handler fire when the API is down? Those are the parts of the system I actually own. The quality of Gemini's responses is something I can evaluate and measure, but not assert in a unit test — hence the human evaluation script with a rubric.
+The most honest limitation is that the scheduler's only measure of value is priority score, and priority is entirely self-reported by the owner. If someone marks a daily walk as HIGH and a medication as LOW, the algorithm respects that — it has no way to know that one of those actually matters more for the pet's health. Garbage in, garbage out. The knapsack finds the optimal combination given the inputs, but it can't correct for inputs that don't reflect reality.
 
-That distinction changed how I think about building with AI a bit. The AI layer isn't a black box. You design the pipeline like: what context does the model receive, how is the response structured, what happens when it fails, how do you measure whether it's doing the job? 
+On the AI side, the model only knows what's inside the context block. It can't look up real veterinary information, and the system prompt deliberately says "never make up medication names or dosages" — which is the right call, but it also means the assistant will sometimes give genuinely vague answers when a specific answer would require actual medical knowledge it doesn't have. The confidence score helps signal this, but it's self-reported by the model and not externally calibrated. An 85% confidence rating doesn't mean the answer is correct 85% of the time — it means the model thinks it's probably right, which is a weaker claim than it sounds.
 
-I'd carry forward designing around clear ownership because it made everything else easier. Once tasks lived on `Pet` and not `Scheduler`, the filtering logic was much easier to implement, the context block was easy to build, and the tests had a clear contract to verify. Basically, a clear structure from the beginning is more useful than AI patch-fixes later!
+There's also no feedback loop. The system doesn't learn from corrections or track whether advice was actually followed. Every session starts fresh.
 
-If I had another iteration, I'd want to stress-test the app against more realistic usage patterns (like adding tasks mid-session, changing a pet's name after generating a plan, running the scheduler with zero tasks), and I'd add a lightweight streak tracker so owners can see consistency trends over time. The next step is making the feedback loop more useful day to day.
+**Could the AI be misused?**
+
+The scope is intentionally narrow — a pet care scheduling assistant — but the underlying model is general-purpose, so there's nothing technically stopping someone from trying to use it for medical advice, off-topic content, or prompt injection via pet names and task titles. Right now the main guardrail is the context injection itself: anchoring every call to the owner's actual pets and schedule naturally keeps responses in scope most of the time. The "never make up medications" instruction in the system prompt is a lightweight second guardrail.
+
+For anything beyond a class project, I'd add input sanitization on pet names and task titles (both get embedded into the system instruction), topic guardrails that detect and deflect out-of-scope requests more reliably, and rate limiting on the API calls. The current implementation trusts the user entirely, which is fine for a controlled demo but not for a real product.
+
+**What surprised me while testing reliability**
+
+The confidence score turned out to be less informative than I expected. I assumed it would be a useful signal — high confidence means good answer, low confidence means be careful. In practice, Gemini would sometimes give low-confidence answers that were completely correct and specific, and high-confidence answers that were fine but generic enough to apply to any pet. The score reflects the model's self-assessment of certainty, not actual accuracy, and those two things aren't the same.
+
+What did work better than expected was the context injection. When the assistant had access to the actual pet names, task details, and schedule, the responses were noticeably more useful than what you'd get from a generic pet care chatbot. Asking "what should I do about Biscuit today?" got a genuinely specific answer that referenced her actual tasks. That specificity only exists because of the pipeline design — the model isn't smarter, it just has better information.
+
+The mocking setup also taught me something. Most of the AI behavior I was testing in the automated suite was actually my own pipeline logic — history growth, context building, fallback handling — not the model itself. Which is correct: those are the parts I own and can assert on. But it was a useful reality check that "testing the AI" and "testing the code around the AI" are different things, and only one of them is really in my control.
+
+**Collaboration with AI — the helpful and the wrong**
+
+The most useful AI suggestion in this project was the knapsack algorithm itself. I knew I wanted something smarter than greedy scheduling, but I'd never actually implemented a DP knapsack before. Walking through the logic with Claude — why the grid approach works, how to trace the backtrack to recover selected items, why it handles ties better than sorting — was genuinely educational. The algorithm went from something I'd heard of in a data structures class to something I can explain and debug. That's the kind of collaboration that actually transfers.
+
+The most concrete example of a wrong suggestion also came from Claude Code. My original implementation used `model="gemini-3-flash-preview"`, which is the model I had access to and intentionally chose. Claude, whose knowledge has a cutoff date, didn't know Gemini 3 existed yet — so it "corrected" the model string to `"gemini-2.0-flash"` as if `gemini-3-flash-preview` was a typo or a made-up name. That change went in, and it caused billing errors because the two models are priced differently. It confidently edited incorrectly, but I understand the shortcoming.
+
+It is important to note AI assistants have knowledge cutoffs, and they don't always know what they don't know. When Claude corrected my model name, it wasn't hallucinating exactly — it was making a reasonable inference from outdated information and presenting it as a fix. The right response was to verify the suggestion against the actual API documentation before accepting it, which I didn't do that time. I do now.
