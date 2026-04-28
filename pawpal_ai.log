@@ -18,3 +18,35 @@
 2026-04-27 23:07:27,030 [INFO] PetAssistant: AFC is enabled with max remote calls: 10.
 2026-04-27 23:07:27,202 [INFO] PetAssistant: HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent "HTTP/1.1 403 Forbidden"
 2026-04-27 23:07:27,204 [ERROR] PetAssistant: API call failed: ClientError: 403 PERMISSION_DENIED. {'error': {'code': 403, 'message': 'Your API key was reported as leaked. Please use another API key.', 'status': 'PERMISSION_DENIED'}}
+2026-04-27 23:18:55,211 [INFO] PetAssistant: User message received (len=44, history_len=0)
+2026-04-27 23:18:55,242 [INFO] PetAssistant: AFC is enabled with max remote calls: 10.
+2026-04-27 23:18:55,373 [INFO] PetAssistant: HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent "HTTP/1.1 400 Bad Request"
+2026-04-27 23:18:55,373 [ERROR] PetAssistant: API call failed: ClientError: 400 INVALID_ARGUMENT. {'error': {'code': 400, 'message': 'API key expired. Please renew the API key.', 'status': 'INVALID_ARGUMENT', 'details': [{'@type': 'type.googleapis.com/google.rpc.ErrorInfo', 'reason': 'API_KEY_INVALID', 'domain': 'googleapis.com', 'metadata': {'service': 'generativelanguage.googleapis.com'}}, {'@type': 'type.googleapis.com/google.rpc.LocalizedMessage', 'locale': 'en-US', 'message': 'API key expired. Please renew the API key.'}]}}
+2026-04-27 23:20:22,256 [INFO] PetAssistant: User message received (len=25, history_len=0)
+2026-04-27 23:20:22,306 [INFO] PetAssistant: AFC is enabled with max remote calls: 10.
+2026-04-27 23:20:26,295 [INFO] PetAssistant: HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent "HTTP/1.1 200 OK"
+2026-04-27 23:20:26,297 [INFO] PetAssistant: AI response received (len=6, confidence=100%)
+2026-04-27 23:27:33,825 [INFO] PetAssistant: User message received (len=65, history_len=2)
+2026-04-27 23:27:33,862 [INFO] PetAssistant: AFC is enabled with max remote calls: 10.
+2026-04-27 23:27:37,039 [INFO] PetAssistant: HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent "HTTP/1.1 200 OK"
+2026-04-27 23:27:37,041 [INFO] PetAssistant: AI response received (len=197, confidence=95%)
+2026-04-27 23:34:40,582 [INFO] PetAssistant: User message received (len=27, history_len=0)
+2026-04-27 23:34:40,618 [INFO] PetAssistant: AFC is enabled with max remote calls: 10.
+2026-04-27 23:34:46,699 [INFO] PetAssistant: HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent "HTTP/1.1 200 OK"
+2026-04-27 23:34:46,700 [INFO] PetAssistant: AI response received (len=126, confidence=n/a%)
+2026-04-27 23:36:32,087 [INFO] PetAssistant: User message received (len=19, history_len=2)
+2026-04-27 23:36:32,122 [INFO] PetAssistant: AFC is enabled with max remote calls: 10.
+2026-04-27 23:36:36,578 [INFO] PetAssistant: HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent "HTTP/1.1 200 OK"
+2026-04-27 23:36:36,581 [INFO] PetAssistant: AI response received (len=183, confidence=100%)
+2026-04-27 23:37:09,318 [INFO] PetAssistant: User message received (len=50, history_len=4)
+2026-04-27 23:37:09,353 [INFO] PetAssistant: AFC is enabled with max remote calls: 10.
+2026-04-27 23:37:17,028 [INFO] PetAssistant: HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent "HTTP/1.1 200 OK"
+2026-04-27 23:37:17,031 [INFO] PetAssistant: AI response received (len=307, confidence=95%)
+2026-04-28 17:23:02,894 [INFO] PetAssistant: User message received (len=38, history_len=0)
+2026-04-28 17:23:02,957 [INFO] PetAssistant: AFC is enabled with max remote calls: 10.
+2026-04-28 17:23:05,643 [INFO] PetAssistant: HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent "HTTP/1.1 200 OK"
+2026-04-28 17:23:05,646 [INFO] PetAssistant: AI response received (len=234, confidence=100%)
+2026-04-28 17:23:44,028 [INFO] PetAssistant: User message received (len=102, history_len=2)
+2026-04-28 17:23:44,064 [INFO] PetAssistant: AFC is enabled with max remote calls: 10.
+2026-04-28 17:23:48,099 [INFO] PetAssistant: HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent "HTTP/1.1 200 OK"
+2026-04-28 17:23:48,102 [INFO] PetAssistant: AI response received (len=487, confidence=95%)

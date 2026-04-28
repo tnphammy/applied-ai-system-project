@@ -110,6 +110,8 @@ with st.sidebar:
             for msg in st.session_state.assistant.chat_history:
                 with st.chat_message(msg["role"]):
                     st.markdown(msg["content"])
+                    if msg["role"] == "assistant" and msg.get("confidence") is not None:
+                        st.caption(f"Confidence: {msg['confidence']}%")
 
         # ── Sick-pet flag ──────────────────────────────────────────────────────
         # Multiselect returns list[str] (pet names). Stored on the assistant so

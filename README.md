@@ -4,6 +4,8 @@ PawPal+ is a pet care scheduling assistant for busy owners who want to go past a
 
 <a href="demo-screenshot.png"><img src="./assets/demo.png" alt="PawPal+ app screenshot" width="100%"/></a>
 
+<a href="https://www.loom.com/share/ebdd9f9de4fa40f8835cd041c10cbca6" alt="PawPal Demo Video" width="100%"></a>
+
 ---
 
 ## Table of Contents
@@ -195,6 +197,9 @@ I also learned that mocking is genuinely useful, not just a test trick. Testing 
 ## Reflection
 
 The biggest thing this project taught me is that "works" has two very different meanings depending on what you're building. For the scheduling logic, "works" is binary and verifiable — either the knapsack finds the optimal combination or it doesn't, and a test tells you which. For the AI integration, "works" is probabilistic and contextual, and that gap changes everything about how you design and test the system.
+
+**Me as an AI Engineer**
+I've honestly been hesitant to work with AI in my coding. But like with any other tool, you have to know it well and know what it's good at, as well as how it can work well with you. I personally still sketch up my ideas myself, but now I am confident using AI as a friend that helps flesh out my ideas and give structure to what I have not been able to organize in the planning stage, and carry out the tedious code that I already know how to do, while also teaching me new ways of formatting code, or new tricks that make me a better creator! I can say I'm able to assess all its strengths and weaknesses to do exactly what I want and still be in control of the big picture.
 
 **Limitations and biases in the system**
 
