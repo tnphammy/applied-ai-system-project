@@ -1,6 +1,7 @@
 import streamlit as st
 from datetime import time, date, timedelta
-from pawpal_system import Owner, Pet, Task, Scheduler, TaskType, Priority, FrequencyPeriod, minutes_to_time_str
+from pawpal_system import Owner, Pet, Task, Scheduler, TaskType, Priority, FrequencyPeriod, minutes_to_time_str, PetAssistant
+
 
 st.set_page_config(page_title="PawPal+", page_icon="🐾", layout="wide")
 
@@ -37,6 +38,106 @@ With AI, integration, the app will be able to:
     + Assist with pet care 
 """
     )
+
+# ---------------------------------------------------------------------------
+# PawPal AI Assistant — sidebar panel
+#
+# st.sidebar is Streamlit's only native collapsible side panel (~25% width).
+# It stays visible as the user scrolls through all four steps and can be
+# collapsed with the built-in arrow button at the top of the page.
+#
+# Pipeline overview (input → output at each stage):
+#   1. st.text_input        → user_input: str         (raw text the owner typed)
+#   2. st.form_submit_button→ submitted: bool          (True when Send is clicked)
+#   3. assistant.ask()      → reply: str               (calls Claude API, returns response)
+#      Inside ask():
+#        a. chat_history.append({"role":"user","content": user_input})
+#        b. build_context_block() → str  (formats pets + plan + sick flags)
+#        c. build_system_prompt() → str  (persona passed to system= param)
+#        d. client.messages.create(system=str, messages=list[dict]) → Message
+#        e. Message.content[0].text → str  (extracted reply)
+#        f. chat_history.append({"role":"assistant","content": reply})
+#   4. st.rerun()           re-renders the sidebar, showing the updated chat_history
+# ---------------------------------------------------------------------------
+
+with st.sidebar:
+    st.markdown("## 🐾 PawPal Assistant")
+
+    if "owner" not in st.session_state:
+        # No owner registered yet — gate the assistant and nudge the user to Step 1
+        st.info(
+            "👋 Register as an owner in **Step 1** first! "
+            "Once saved, PawPal Assistant will unlock here so you can ask about "
+            "your pets' schedule, get care tips, and more."
+        )
+    else:
+        # ── Initialize PetAssistant once per session ──────────────────────────
+        # PetAssistant is stored in session_state so chat_history survives reruns.
+        # api_key: str — read from .streamlit/secrets.toml (never hardcoded here).
+        # all_pets: list[Pet] — live reference so the assistant always sees current pets.
+        # plan: dict[date, list[Task]] | None — None until Step 4 is run.
+        if "assistant" not in st.session_state:
+            st.session_state.assistant = PetAssistant(
+                api_key=st.secrets["GEMINI_API_KEY"],
+                all_pets=st.session_state.owner.pets,
+                plan=st.session_state.get("plan"),
+            )
+        else:
+            # Refresh on every rerun so the assistant sees the latest pets and schedule
+            st.session_state.assistant.all_pets = st.session_state.owner.pets
+            st.session_state.assistant.plan     = st.session_state.get("plan")
+
+        # ── Chat history display ───────────────────────────────────────────────
+        # st.container(height=) creates a fixed-height scrollable box.
+        # Each msg in chat_history is {"role": "user"|"assistant", "content": str}.
+        # st.chat_message(role) renders the correct avatar and alignment automatically.
+        with st.container(height=380):
+            if not st.session_state.assistant.chat_history:
+                st.caption("Ask me anything — your schedule, care tips, what to do if a pet is sick...")
+            for msg in st.session_state.assistant.chat_history:
+                with st.chat_message(msg["role"]):
+                    st.markdown(msg["content"])
+
+        # ── Sick-pet flag ──────────────────────────────────────────────────────
+        # Multiselect returns list[str] (pet names). Stored on the assistant so
+        # build_context_block() can inject a ⚠️ warning into the API context.
+        pet_names = [p.name for p in st.session_state.owner.pets]
+        st.session_state.assistant.sick_pets = st.multiselect(
+            "🤒 Any pets feeling unwell?",
+            options=pet_names,
+            default=st.session_state.assistant.sick_pets,
+        )
+
+        # ── Message input form ─────────────────────────────────────────────────
+        # st.form with clear_on_submit=True wipes the text_input after the user
+        # clicks Send, so they don't have to manually clear it each time.
+        # Everything inside the form is batched — nothing fires until Submit is clicked.
+        with st.form("chat_form", clear_on_submit=True):
+            # text_input → user_input: str  (empty string "" if the field is blank)
+            user_input: str = st.text_input(
+                "message",
+                placeholder="Ask about your pets' schedule...",
+                label_visibility="collapsed",
+            )
+            col_send, col_clr = st.columns([3, 1])
+            with col_send:
+                # submitted: bool — True only on the rerun triggered by clicking Send
+                submitted: bool = st.form_submit_button("Send →", use_container_width=True)
+            with col_clr:
+                clear: bool = st.form_submit_button("🗑️", use_container_width=True)
+
+        # ── Handle Send ────────────────────────────────────────────────────────
+        # ask() takes user_input: str, calls Claude API, appends both turns to
+        # chat_history, and returns reply: str. We rerun so the container above
+        # re-renders with the new messages visible.
+        if submitted and user_input:
+            st.session_state.assistant.ask(user_input)
+            st.rerun()
+
+        # ── Handle Clear ───────────────────────────────────────────────────────
+        if clear:
+            st.session_state.assistant.clear_history()
+            st.rerun()
 
 st.divider()
 

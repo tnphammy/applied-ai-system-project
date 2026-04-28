@@ -1,7 +1,9 @@
 from dataclasses import dataclass, field
 from datetime import date, timedelta
 from enum import Enum
-import anthropic
+from google import genai
+from google.genai import types
+# import google.generativeai as genai
 
 
 
@@ -488,12 +490,12 @@ class Scheduler:
 @dataclass
 class PetAssistant:
     """
-    Bridges the Streamlit UI and Claude API.
+    Bridges the Streamlit UI and Gemini API.
     Holds live app state (pets, plan, sick flags) and conversation history
     so every API call is grounded in the owner's actual schedule.
     """
     # api_key is a constructor parameter — when app.py creates PetAssistant(...),
-    # it passes st.secrets["ANTHROPIC_API_KEY"] here so this class never touches Streamlit.
+    # it passes st.secrets["GEMINI_API_KEY"] here so this class never touches Streamlit.
     api_key: str
     all_pets: list[Pet] = field(default_factory=list)
     plan: dict[date, list[Task]] | None = None
@@ -506,30 +508,75 @@ class PetAssistant:
         Input:  user_message: str
         Output: reply: str  (displayed in st.chat_message)
         """
-        # 1. Append user turn in Anthropic's required dict format
+        # 1. Append user turn to internal history using "user"/"assistant" roles.
+        #    We keep this format so app.py can pass msg["role"] to st.chat_message()
+        #    without any translation — "assistant" renders the correct avatar there.
         self.chat_history.append({"role": "user", "content": user_message})
 
-        # 2. Inject context (schedule + pets) as a silent exchange before the real history.
-        #    This tells Claude about the owner's data without cluttering the visible chat.
-        messages_with_context = [
-            {"role": "user",      "content": f"[App state]\n{self.build_context_block()}"},
-            {"role": "assistant", "content": "Got it! I have your pet care info ready."},
-            *self.chat_history,
+        # 2. Convert internal history to Gemini's format before the API call.
+        #    Gemini requires role "model" where we store "assistant", and wraps
+        #    the text in a "parts" list instead of a flat "content" string.
+        gemini_contents = [
+            {
+                "role": "model" if msg["role"] == "assistant" else "user",
+                "parts": [{"text": msg["content"]}],
+            }
+            for msg in self.chat_history
         ]
 
-        # 3. Call Claude API. system= sets the persona; messages= carries the full conversation.
-        client = anthropic.Anthropic(api_key=self.api_key)
-        response = client.messages.create(
-            model="claude-sonnet-4-6",
-            max_tokens=1024,
-            system=self.build_system_prompt(),
-            messages=messages_with_context,
+        # 3. Merge persona + live app data into one system_instruction string.
+        #    Gemini reads this before any contents, so the model knows who it is
+        #    AND what the owner's current schedule looks like on every call.
+        system_instruction = (
+            f"{self.build_system_prompt()}\n\n"
+            f"{self.build_context_block()}"
         )
 
-        # 4. content is list[ContentBlock] — [0].text extracts the str reply
-        reply: str = response.content[0].text
+        # 4. Call Gemini API.
+        #    - contents: list[dict] — the full conversation in Gemini's format
+        #    - system_instruction: str — persona + context, injected before contents
+        #    - max_output_tokens: caps the reply length
+        # client = genai.Client(api_key=self.api_key)
+        # response = client.models.generate_content(
+        #     model="gemini-2.0-flash",
+        #     contents=gemini_contents,
+        #     config=types.GenerateContentConfig(
+        #         system_instruction=system_instruction,
+        #         max_output_tokens=1024,
+        #     ),
+        # )
 
-        # 5. Save assistant turn so the next question remembers this answer
+
+        # genai.configure(api_key=self.api_key)
+        # client = genai.GenerativeModel(
+        #     model_name="gemini-1.5-flash",  
+        #     system_instruction=self.build_system_prompt(),
+        # )
+        # response = client.generate_content(messages_with_context)
+        # reply: str = response.text
+
+
+
+        # client = genai.Client()
+
+        # response = client.models.generate_content(
+        #     model="gemini-3-flash-preview", contents="Explain how AI works in a few words"
+        # )
+
+        client = genai.Client(api_key=self.api_key)   # pass key — Client() alone uses env var, not self.api_key
+        response = client.models.generate_content(
+            model="gemini-3-flash-preview",                  # gemini-3-flash-preview doesn't exist yet
+            config=types.GenerateContentConfig(
+                system_instruction=system_instruction),
+            contents=gemini_contents                   # use converted format, not self.chat_history
+        )
+
+        print(response.text)
+
+        # 5. response.text is a str — Gemini flattens the reply for us
+        reply: str = response.text
+
+        # 6. Save assistant turn so the next question remembers this answer
         self.chat_history.append({"role": "assistant", "content": reply})
 
         return reply
@@ -540,8 +587,8 @@ class PetAssistant:
 
     def build_system_prompt(self) -> str:
         """
-        Returns the static persona string passed to system= in every API call.
-        Output: str — Claude reads this before any messages.
+        Returns the static persona string passed to system_instruction= in every API call.
+        Output: str — Gemini reads this before any contents.
         """
         return (
             "You are PawPal, a friendly and knowledgeable pet care assistant. "
