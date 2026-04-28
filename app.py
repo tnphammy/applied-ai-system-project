@@ -63,6 +63,21 @@ With AI, integration, the app will be able to:
 with st.sidebar:
     st.markdown("## 🐾 PawPal Assistant")
 
+    # Override the fixed-pixel height Streamlit sets on st.container(height=)
+    # so the chat window scales with the viewport instead of being a fixed box.
+    # min-height keeps it usable on very short screens.
+    st.markdown(
+        """
+        <style>
+        [data-testid="stSidebar"] [data-testid="stVerticalBlockBorderWrapper"] {
+            height: 62vh !important;
+            min-height: 200px;
+        }
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
+
     if "owner" not in st.session_state:
         # No owner registered yet — gate the assistant and nudge the user to Step 1
         st.info(
@@ -91,7 +106,7 @@ with st.sidebar:
         # st.container(height=) creates a fixed-height scrollable box.
         # Each msg in chat_history is {"role": "user"|"assistant", "content": str}.
         # st.chat_message(role) renders the correct avatar and alignment automatically.
-        with st.container(height=380):
+        with st.container(height=600):
             if not st.session_state.assistant.chat_history:
                 st.caption("Ask me anything — your schedule, care tips, what to do if a pet is sick...")
             for msg in st.session_state.assistant.chat_history:
