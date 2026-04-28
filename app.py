@@ -18,21 +18,19 @@ with st.expander("Scenario", expanded=True):
         """
 **PawPal+** is a pet care planning assistant. It helps a pet owner plan care tasks
 for their pet(s) based on constraints like time, priority, and preferences.
-
-You will design and implement the scheduling logic and connect it to this Streamlit UI.
 """
     )
 
-with st.expander("What you need to build", expanded=True):
+with st.expander("Features", expanded=True):
     st.markdown(
         """
-At minimum, your system should:
+At the basic level, the app can:
 - Represent pet care tasks (what needs to happen, how long it takes, priority)
 - Represent the pet and the owner (basic info and preferences)
 - Build a plan/schedule for a day that chooses and orders tasks based on constraints
 - Explain the plan (why each task was chosen and when it happens)
 
-With AI, integration, the app will be able to:
+With AI integration, the app can:
 - Respond to you in natural language about: 
     + Schedule inquiries
     + Assist with pet care 
@@ -106,7 +104,7 @@ with st.sidebar:
         # st.container(height=) creates a fixed-height scrollable box.
         # Each msg in chat_history is {"role": "user"|"assistant", "content": str}.
         # st.chat_message(role) renders the correct avatar and alignment automatically.
-        with st.container(height=600):
+        with st.container(height=500):
             if not st.session_state.assistant.chat_history:
                 st.caption("Ask me anything — your schedule, care tips, what to do if a pet is sick...")
             for msg in st.session_state.assistant.chat_history:
